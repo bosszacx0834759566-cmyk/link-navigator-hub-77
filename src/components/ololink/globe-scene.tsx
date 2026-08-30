@@ -1,6 +1,6 @@
 'use client';
 
-import { Canvas, useFrame, useLoader, useThree, type ThreeEvent } from '@react-three/fiber';
+import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 
 import { Html, OrbitControls, Stars } from '@react-three/drei';
 import {
@@ -235,14 +235,55 @@ function tuneEarthTexture(tex: THREE.Texture, maxAniso: number, srgb = true) {
 }
 
 /**
+ * Loads textures without suspending. A failed request resolves to `null`
+ * instead of throwing, so one missing image can never blank the scene.
+ */
+function useSafeTextures(urls: string[]): (THREE.Texture | null)[] {
+  const key = urls.join('|');
+  const [textures, setTextures] = useState<(THREE.Texture | null)[]>(() => urls.map(() => null));
+
+  useEffect(() => {
+    let cancelled = false;
+    const loader = new THREE.TextureLoader();
+    const list = key.split('|');
+    setTextures(list.map(() => null));
+    list.forEach((url, i) => {
+      loader.load(
+        url,
+        (tex) => {
+          if (cancelled) return;
+          setTextures((prev) => {
+            const next = [...prev];
+            next[i] = tex;
+            return next;
+          });
+        },
+        undefined,
+        () => {
+          console.warn('[globe] texture failed to load:', url);
+        }
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [key]);
+
+  return textures;
+}
+
+/**
  * Native-resolution imagery patch laid over the 8K globe for the region the
  * camera is looking at. Only one tile is ever resident, so the extra GPU cost
  * is a single ~3k x 1.4k texture.
  */
 function RegionTile({ tile }: { tile: EarthTile }) {
   const gl = useThree((s) => s.gl);
-  const map = useLoader(THREE.TextureLoader, tile.url);
-  useMemo(() => tuneEarthTexture(map, gl.capabilities.getMaxAnisotropy()), [map, gl]);
+  const [map] = useSafeTextures([tile.url]);
+  useMemo(() => {
+    if (map) tuneEarthTexture(map, gl.capabilities.getMaxAnisotropy());
+  }, [map, gl]);
+
 
   const args = useMemo(
     () =>
@@ -257,6 +298,8 @@ function RegionTile({ tile }: { tile: EarthTile }) {
       ] as const,
     [tile]
   );
+
+  if (!map) return null;
 
   return (
     <mesh scale={1.0006} renderOrder={1}>
@@ -275,14 +318,12 @@ function RegionTile({ tile }: { tile: EarthTile }) {
 function Earth() {
   const gl = useThree((s) => s.gl);
   const { level, region } = useLod();
-  const maps = useLoader(THREE.TextureLoader, [EARTH_8K_URL, earthClouds]);
-  const day = maps[0]!;
-  const clouds = maps[1]!;
+  const [day, clouds] = useSafeTextures([EARTH_8K_URL, earthClouds]);
 
   useMemo(() => {
     const maxAniso = gl.capabilities.getMaxAnisotropy();
-    tuneEarthTexture(day, maxAniso);
-    tuneEarthTexture(clouds, maxAniso, false);
+    if (day) tuneEarthTexture(day, maxAniso);
+    if (clouds) tuneEarthTexture(clouds, maxAniso, false);
   }, [day, clouds, gl]);
 
   /** regional + local views get the native-resolution imagery tile */
@@ -298,7 +339,11 @@ function Earth() {
       {/* surface: NASA Blue Marble albedo, unlit so the whole globe is evenly visible */}
       <mesh>
         <sphereGeometry args={[1, 128, 128]} />
-        <meshBasicMaterial map={day} toneMapped={false} color="#ffffff" />
+        <meshBasicMaterial
+          map={day ?? null}
+          toneMapped={false}
+          color={day ? '#ffffff' : '#123a63'}
+        />
       </mesh>
 
       {/* high-resolution regional imagery */}
@@ -310,18 +355,21 @@ function Earth() {
 
 
       {/* cloud layer */}
-      <mesh ref={cloudRef} scale={1.006}>
-        <sphereGeometry args={[1, 96, 96]} />
-        <meshBasicMaterial
-          map={clouds}
-          alphaMap={clouds}
-          transparent
-          opacity={0.42}
-          depthWrite={false}
-          toneMapped={false}
-          color="#ffffff"
-        />
-      </mesh>
+      {clouds ? (
+        <mesh ref={cloudRef} scale={1.006}>
+          <sphereGeometry args={[1, 96, 96]} />
+          <meshBasicMaterial
+            map={clouds}
+            alphaMap={clouds}
+            transparent
+            opacity={0.42}
+            depthWrite={false}
+            toneMapped={false}
+            color="#ffffff"
+          />
+        </mesh>
+      ) : null}
+
       {/* inner atmosphere */}
       <mesh>
         <sphereGeometry args={[1.016, 64, 64]} />
