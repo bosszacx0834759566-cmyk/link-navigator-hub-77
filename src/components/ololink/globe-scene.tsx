@@ -235,14 +235,55 @@ function tuneEarthTexture(tex: THREE.Texture, maxAniso: number, srgb = true) {
 }
 
 /**
+ * Loads textures without suspending. A failed request resolves to `null`
+ * instead of throwing, so one missing image can never blank the scene.
+ */
+function useSafeTextures(urls: string[]): (THREE.Texture | null)[] {
+  const key = urls.join('|');
+  const [textures, setTextures] = useState<(THREE.Texture | null)[]>(() => urls.map(() => null));
+
+  useEffect(() => {
+    let cancelled = false;
+    const loader = new THREE.TextureLoader();
+    const list = key.split('|');
+    setTextures(list.map(() => null));
+    list.forEach((url, i) => {
+      loader.load(
+        url,
+        (tex) => {
+          if (cancelled) return;
+          setTextures((prev) => {
+            const next = [...prev];
+            next[i] = tex;
+            return next;
+          });
+        },
+        undefined,
+        () => {
+          console.warn('[globe] texture failed to load:', url);
+        }
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [key]);
+
+  return textures;
+}
+
+/**
  * Native-resolution imagery patch laid over the 8K globe for the region the
  * camera is looking at. Only one tile is ever resident, so the extra GPU cost
  * is a single ~3k x 1.4k texture.
  */
 function RegionTile({ tile }: { tile: EarthTile }) {
   const gl = useThree((s) => s.gl);
-  const map = useLoader(THREE.TextureLoader, tile.url);
-  useMemo(() => tuneEarthTexture(map, gl.capabilities.getMaxAnisotropy()), [map, gl]);
+  const [map] = useSafeTextures([tile.url]);
+  useMemo(() => {
+    if (map) tuneEarthTexture(map, gl.capabilities.getMaxAnisotropy());
+  }, [map, gl]);
+
 
   const args = useMemo(
     () =>
