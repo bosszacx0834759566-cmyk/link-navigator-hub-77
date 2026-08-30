@@ -12,6 +12,12 @@ import {
   type ScenarioId,
   type ScenarioProfile,
 } from '@/lib/ololink';
+import { sceneTime } from '@/lib/geo2d';
+import {
+  computeLaserAssignment,
+  sameAssignment,
+  type LaserAssignment,
+} from '@/lib/laser-links';
 
 export type RailId =
   | 'overview'
@@ -88,6 +94,8 @@ export interface OloLinkState {
   /** receiverId -> satellite id currently inside a simulated communication window */
   windows: Record<string, string | null>;
   reportWindow: (receiverId: string, satId: string | null) => void;
+  /** hapsId -> LEO id holding the single active laser link (shared by 2D + 3D) */
+  laserLinks: LaserAssignment;
   toggleTech: (t: Tech) => void;
   setScenario: (id: ScenarioId) => void;
   setPanel: (id: RailId | null) => void;
@@ -159,6 +167,25 @@ export function useOloLink(): OloLinkState {
     [push]
   );
 
+
+  /* ---------------------------------------------------------------------
+   * LEO -> HAPS laser links: computed once here (single source of truth) and
+   * consumed identically by the 3D globe and the 2D map. One LEO can hold a
+   * laser link to at most one HAPS at a time.
+   * ------------------------------------------------------------------- */
+  const [laserLinks, setLaserLinks] = useState<LaserAssignment>(() => computeLaserAssignment(sceneTime()));
+  const laserRef = useRef<LaserAssignment>(laserLinks);
+
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => {
+      const next = computeLaserAssignment(sceneTime(), laserRef.current);
+      if (sameAssignment(next, laserRef.current)) return;
+      laserRef.current = next;
+      setLaserLinks(next);
+    }, 300);
+    return () => clearInterval(t);
+  }, [running]);
 
   useEffect(() => {
     if (!running) return;
@@ -270,6 +297,7 @@ export function useOloLink(): OloLinkState {
     techFilter,
     windows,
     reportWindow,
+    laserLinks,
     toggleTech: (t) => setTechFilter((f) => ({ ...f, [t]: !f[t] })),
     setScenario,
     setPanel,

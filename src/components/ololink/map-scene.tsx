@@ -13,6 +13,7 @@ import {
   type AssetKind,
 } from '@/lib/ololink';
 import { MAP_H, MAP_W, livePosition, project, sceneTime, type LatLon } from '@/lib/geo2d';
+import { HAPS_ASSETS } from '@/lib/laser-links';
 
 const KIND_COLOR: Record<AssetKind, string> = {
   satellite: '#7dd3fc',
@@ -337,33 +338,16 @@ export function MapScene({ state }: { state: OloLinkState }) {
 
           {/* ------------------- LEO -> HAPS straight green laser links */}
           {(() => {
-            const R = Math.PI / 180;
-            const central = (a: LatLon, b: LatLon) => {
-              const c =
-                Math.sin(a.lat * R) * Math.sin(b.lat * R) +
-                Math.cos(a.lat * R) * Math.cos(b.lat * R) * Math.cos((a.lon - b.lon) * R);
-              return (Math.acos(Math.max(-1, Math.min(1, c))) * 180) / Math.PI;
-            };
-            const sats = ASSETS.filter((a) => a.kind === 'satellite');
-            const haps = ASSETS.filter((a) => a.kind === 'haps');
+            // links come straight from the shared simulation state (same as 3D)
             const lines: React.ReactElement[] = [];
-            for (const h of haps) {
-              const hp = positions[h.id];
-              if (!hp) continue;
-              // nearest LEO currently inside the optical acquisition cone
-              let best: { id: string; d: number } | null = null;
-              for (const s of sats) {
-                const sp = positions[s.id];
-                if (!sp) continue;
-                const d = central(sp, hp);
-                if (d < 16 && (!best || d < best.d)) best = { id: s.id, d };
-              }
-              if (!best) continue;
-              const pa = pointOf(best.id);
+            for (const h of HAPS_ASSETS) {
+              const satId = state.laserLinks[h.id];
+              if (!satId) continue;
+              const pa = pointOf(satId);
               const pb = pointOf(h.id);
               if (!pa || !pb) continue;
               if (Math.abs(pa.x - pb.x) > MAP_W / 2) continue; // antimeridian wrap
-              const strength = 1 - best.d / 16;
+              const strength = 1;
               lines.push(
                 <g key={`laser-${h.id}`}>
                   <line

@@ -65,6 +65,7 @@ import {
   staticPosition,
   windowScore,
 } from '@/lib/orbits';
+import type { LaserAssignment } from '@/lib/laser-links';
 
 /** Ground stations + the drone and HAPS flying above each of them. */
 const SURFACE_STACK = ASSETS.filter(
@@ -779,47 +780,14 @@ function LaserBeam({
   );
 }
 
-function HapsLaserNetwork({ live, running }: { live: LiveMap; running: boolean }) {
-  const [pairs, setPairs] = useState<string[]>([]);
-  const held = useRef<Set<string>>(new Set());
-  const acc = useRef(0);
-  const tmp = useRef(new THREE.Vector3());
-
-  useFrame((_, d) => {
-    acc.current += d;
-    if (acc.current < 0.3) return;
-    acc.current = 0;
-    if (!running) return;
-
-    const next: string[] = [];
-    for (const rx of HAPS_RECEIVERS) {
-      const rp = live.get(rx.id);
-      if (!rp) continue;
-      let best: { key: string; score: number } | null = null;
-      for (const sat of SATELLITES) {
-        const sp = live.get(sat.id);
-        if (!sp) continue;
-        const score = windowScore(tmp.current.copy(sp), rp);
-        const key = `${sat.id}|${rx.id}`;
-        const threshold = held.current.has(key) ? LOS : ACQUIRE;
-        if (score > threshold && (!best || score > best.score)) best = { key, score };
-      }
-      if (best) next.push(best.key);
-    }
-    next.sort();
-
-    const prev = held.current;
-    if (next.length !== prev.size || next.some((k) => !prev.has(k))) {
-      held.current = new Set(next);
-      setPairs(next);
-    }
-  });
-
+function HapsLaserNetwork({ live, laserLinks }: { live: LiveMap; laserLinks: LaserAssignment }) {
+  // rendered straight from the shared simulation state — identical to 2D
   return (
     <>
-      {pairs.map((key) => {
-        const [satId, rxId] = key.split('|') as [string, string];
-        return <LaserBeam key={key} satId={satId} rxId={rxId} live={live} />;
+      {HAPS_RECEIVERS.map((rx) => {
+        const satId = laserLinks[rx.id];
+        if (!satId) return null;
+        return <LaserBeam key={`${satId}|${rx.id}`} satId={satId} rxId={rx.id} live={live} />;
       })}
     </>
   );
@@ -2256,7 +2224,7 @@ function SceneContent({
 
       {/* LEO constellation — 20 satellites propagated on their visual orbits */}
       <OrbitDriver state={state} live={live} />
-      <HapsLaserNetwork live={live} running={state.running} />
+      <HapsLaserNetwork live={live} laserLinks={state.laserLinks} />
 
       {layers.orbits && SATELLITES.map((s) => <OrbitTrack key={`trk-${s.id}`} elId={s.id} />)}
       {SATELLITES.map((sat) => (
