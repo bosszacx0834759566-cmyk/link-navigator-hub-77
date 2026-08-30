@@ -13,6 +13,7 @@ import {
   type AssetKind,
 } from '@/lib/ololink';
 import { MAP_H, MAP_W, livePosition, project, sceneTime, type LatLon } from '@/lib/geo2d';
+import { HAPS_ASSETS } from '@/lib/laser-links';
 
 const KIND_COLOR: Record<AssetKind, string> = {
   satellite: '#7dd3fc',
