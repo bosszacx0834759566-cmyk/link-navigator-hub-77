@@ -12,6 +12,12 @@ import {
   type ScenarioId,
   type ScenarioProfile,
 } from '@/lib/ololink';
+import { sceneTime } from '@/lib/geo2d';
+import {
+  computeLaserAssignment,
+  sameAssignment,
+  type LaserAssignment,
+} from '@/lib/laser-links';
 
 export type RailId =
   | 'overview'
