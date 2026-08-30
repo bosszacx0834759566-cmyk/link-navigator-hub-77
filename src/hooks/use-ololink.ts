@@ -297,6 +297,7 @@ export function useOloLink(): OloLinkState {
     techFilter,
     windows,
     reportWindow,
+    laserLinks,
     toggleTech: (t) => setTechFilter((f) => ({ ...f, [t]: !f[t] })),
     setScenario,
     setPanel,
