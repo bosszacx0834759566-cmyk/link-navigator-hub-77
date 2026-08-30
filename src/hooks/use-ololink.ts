@@ -94,6 +94,8 @@ export interface OloLinkState {
   /** receiverId -> satellite id currently inside a simulated communication window */
   windows: Record<string, string | null>;
   reportWindow: (receiverId: string, satId: string | null) => void;
+  /** hapsId -> LEO id holding the single active laser link (shared by 2D + 3D) */
+  laserLinks: LaserAssignment;
   toggleTech: (t: Tech) => void;
   setScenario: (id: ScenarioId) => void;
   setPanel: (id: RailId | null) => void;
