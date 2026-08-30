@@ -168,6 +168,25 @@ export function useOloLink(): OloLinkState {
   );
 
 
+  /* ---------------------------------------------------------------------
+   * LEO -> HAPS laser links: computed once here (single source of truth) and
+   * consumed identically by the 3D globe and the 2D map. One LEO can hold a
+   * laser link to at most one HAPS at a time.
+   * ------------------------------------------------------------------- */
+  const [laserLinks, setLaserLinks] = useState<LaserAssignment>(() => computeLaserAssignment(sceneTime()));
+  const laserRef = useRef<LaserAssignment>(laserLinks);
+
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => {
+      const next = computeLaserAssignment(sceneTime(), laserRef.current);
+      if (sameAssignment(next, laserRef.current)) return;
+      laserRef.current = next;
+      setLaserLinks(next);
+    }, 300);
+    return () => clearInterval(t);
+  }, [running]);
+
   useEffect(() => {
     if (!running) return;
     const t = setInterval(() => {
